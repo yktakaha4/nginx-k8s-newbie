@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: newbie-deployment
+  labels:
+    app: newbie
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: newbie
+  template:
+    metadata:
+      labels:
+        app: newbie
+    spec:
+      volumes:
+        - name: web-files
+          emptyDir: {}
+        - name: web-config
+          configMap:
+            name: newbie-web-config
+      initContainers:
+        - name: static-files
+          image: yktakaha4/static-files:latest
+          args:
+            - cp
+            - -RT
+            - /var/opt/public
+            - /var/opt/web-files
+          volumeMounts:
+            - name: web-files
+              mountPath: /var/opt/web-files
+      containers:
+        - name: app
+          image: gcr.io/google-samples/hello-app:1.0
+        - name: web
+          image: nginx:1.23
+          volumeMounts:
+            - name: web-files
+              mountPath: /var/opt/web-files
+            - name: web-config
+              mountPath: /etc/nginx/conf.d
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: newbie
+  name: newbie-service
+spec:
+  ports:
+  - port: 8888
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: newbie
+  type: NodePort
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: newbie-web-config
+data:
+  default.conf: |
+    server {
+      listen 80;
+
+      location / {
+        root /var/opt/web-files/;
+        try_files $uri $uri/index.html @proxy;
+      }
+
+      location @proxy {
+        proxy_pass http://localhost:8080;
+      }
+    }
